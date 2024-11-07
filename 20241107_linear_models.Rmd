@@ -95,3 +95,65 @@ But then change with new order of the nyc_airbnb data we factored/ reordering th
 
 But still can compare Brooklyn and Queens by just comparing the two intercepts. Nothign inherently changes, just the reference 
 
+## Some Diagnostics
+
+```{r}
+nyc_airbnb %>% 
+  ggplot(aes(x = stars, y = price)) + 
+  geom_point() +
+  stat_smooth(method = "lm")
+```
+
+Does the stars go up as the price goes up?
+Looking at this plot this is about right (but there are extreme outliers; residuals)
+
+
+Regression diagnostics can identify issues in model fit, especially related to certain failures in model assumptions. Examining residuals and fitted values are therefore an imporant component of any modeling exercise.
+
+Most diagnostics use residuals 
+
+```{r}
+modelr::add_residuals(nyc_airbnb, fit)
+```
+
+Now have a dataframe and can do dataframe things to it 
+
+
+```{r}
+modelr::add_residuals(nyc_airbnb, fit) %>% 
+  ggplot(aes(x = resid)) +
+  geom_histogram()
+```
+
+
+```{r}
+modelr::add_residuals(nyc_airbnb, fit) %>% 
+  ggplot(aes(x = borough, y = resid)) +
+  geom_violin() + 
+  ylim(-200, 200)
+```
+
+See that residuals are relatively skewed and the residual distribution different across different boroughs 
+
+This gives us an understanding of how our model regression is fitting our data. Whether there is bias, fitting one borough better than another etc. 
+
+Residuals against star ratings 
+
+```{r}
+modelr::add_residuals(nyc_airbnb, fit) %>% # in this line of code, use modelr fit this dataframe and use fit to add residuals
+  ggplot(aes(x = stars, y = resid)) +
+  geom_point() 
+```
+
+
+Can compare residuals against fitted values
+
+```{r}
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  modelr::add_predictions(fit) %>% 
+  ggplot(aes(x = pred, y = resid)) + 
+  geom_point()
+```
+
+

@@ -148,3 +148,113 @@ reordering the borough based on frequency, so Manhatten became reference
 
 But still can compare Brooklyn and Queens by just comparing the two
 intercepts. Nothign inherently changes, just the reference
+
+## Some Diagnostics
+
+``` r
+nyc_airbnb %>% 
+  ggplot(aes(x = stars, y = price)) + 
+  geom_point() +
+  stat_smooth(method = "lm")
+```
+
+    ## `geom_smooth()` using formula = 'y ~ x'
+
+    ## Warning: Removed 9962 rows containing non-finite outside the scale range
+    ## (`stat_smooth()`).
+
+    ## Warning: Removed 9962 rows containing missing values or values outside the scale range
+    ## (`geom_point()`).
+
+![](20241107_linear_models_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+Does the stars go up as the price goes up? Looking at this plot this is
+about right (but there are extreme outliers; residuals)
+
+Regression diagnostics can identify issues in model fit, especially
+related to certain failures in model assumptions. Examining residuals
+and fitted values are therefore an imporant component of any modeling
+exercise.
+
+Most diagnostics use residuals
+
+``` r
+modelr::add_residuals(nyc_airbnb, fit)
+```
+
+    ## # A tibble: 40,492 × 6
+    ##    price stars borough neighborhood room_type        resid
+    ##    <dbl> <dbl> <fct>   <chr>        <fct>            <dbl>
+    ##  1    99   5   Bronx   City Island  Private room      9.47
+    ##  2   200  NA   Bronx   City Island  Private room     NA   
+    ##  3   300  NA   Bronx   City Island  Entire home/apt  NA   
+    ##  4   125   5   Bronx   City Island  Entire home/apt  35.5 
+    ##  5    69   5   Bronx   City Island  Private room    -20.5 
+    ##  6   125   5   Bronx   City Island  Entire home/apt  35.5 
+    ##  7    85   5   Bronx   City Island  Entire home/apt  -4.53
+    ##  8    39   4.5 Bronx   Allerton     Private room    -34.5 
+    ##  9    95   5   Bronx   Allerton     Entire home/apt   5.47
+    ## 10   125   4.5 Bronx   Allerton     Entire home/apt  51.5 
+    ## # ℹ 40,482 more rows
+
+Now have a dataframe and can do dataframe things to it
+
+``` r
+modelr::add_residuals(nyc_airbnb, fit) %>% 
+  ggplot(aes(x = resid)) +
+  geom_histogram()
+```
+
+    ## `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
+
+    ## Warning: Removed 9962 rows containing non-finite outside the scale range
+    ## (`stat_bin()`).
+
+![](20241107_linear_models_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+``` r
+modelr::add_residuals(nyc_airbnb, fit) %>% 
+  ggplot(aes(x = borough, y = resid)) +
+  geom_violin() + 
+  ylim(-200, 200)
+```
+
+    ## Warning: Removed 11208 rows containing non-finite outside the scale range
+    ## (`stat_ydensity()`).
+
+![](20241107_linear_models_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+See that residuals are relatively skewed and the residual distribution
+different across different boroughs
+
+This gives us an understanding of how our model regression is fitting
+our data. Whether there is bias, fitting one borough better than another
+etc.
+
+Residuals against star ratings
+
+``` r
+modelr::add_residuals(nyc_airbnb, fit) %>% # in this line of code, use modelr fit this dataframe and use fit to add residuals
+  ggplot(aes(x = stars, y = resid)) +
+  geom_point() 
+```
+
+    ## Warning: Removed 9962 rows containing missing values or values outside the scale range
+    ## (`geom_point()`).
+
+![](20241107_linear_models_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
+Can compare residuals against fitted values
+
+``` r
+nyc_airbnb %>% 
+  modelr::add_residuals(fit) %>% 
+  modelr::add_predictions(fit) %>% 
+  ggplot(aes(x = pred, y = resid)) + 
+  geom_point()
+```
+
+    ## Warning: Removed 9962 rows containing missing values or values outside the scale range
+    ## (`geom_point()`).
+
+![](20241107_linear_models_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
