@@ -1,0 +1,97 @@
+---
+title: "20241107_linear_models"
+output: github_document
+date: "2024-11-07"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(p8105.datasets)
+
+set.seed(1)
+
+```
+
+In airbnb dataset, see how different rental prices differ
+
+Doing some data cleaning first
+
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb %>%  
+  mutate(stars = review_scores_location / 2) %>%  
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) %>%  
+  filter(borough != "Staten Island") %>%  
+  select(price, stars, borough, neighborhood, room_type) %>% 
+  mutate(
+    borough = fct_infreq(borough),
+    room_type = fct_infreq(room_type)
+  )
+```
+
+## Fit some models 
+
+consider price as an outcome that may depend on rating We fit that initial model in the following code.
+
+```{r}
+fit = lm(price ~ stars, data = nyc_airbnb)
+
+```
+
+Giving us:
+Coefficients:
+(Intercept)        stars  
+     -66.50        44.11  
+     
+other things that we can ask 
+
+```{r}
+fit = lm(price ~ stars, data = nyc_airbnb)
+
+summary(fit)
+
+names(summary(fit))
+
+coef(fit)
+
+broom::tidy(fit) #tidys up the summary into a tibble, easily interpret. since tibble can tidy it 
+
+fit %>% 
+  broom::tidy() %>% 
+  select(term, estimate, p.value)
+
+fit %>% 
+  broom::glance()
+```
+
+Try a bit more complex 
+
+```{r}
+fit = 
+  lm(price ~ stars + borough, data = nyc_airbnb)
+```
+
+borough broken up into one reference category (the bronx) and three remaining boroughs are compared to the bronx (ordered based alphabetical)
+
+```{r}
+fit = 
+  lm(price ~ stars + borough, data = nyc_airbnb)
+
+fit %>% 
+  broom::tidy() %>% 
+  select(term, estimate, p.value) %>% 
+  mutate(
+    term = str_replace(term, "borough", "Borough: ")
+  ) %>% 
+  knitr::kable(digits = 3)
+
+```
+
+But then change with new order of the nyc_airbnb data we factored/ reordering the borough based on frequency, so Manhatten became reference 
+
+But still can compare Brooklyn and Queens by just comparing the two intercepts. Nothign inherently changes, just the reference 
+
