@@ -156,4 +156,176 @@ nyc_airbnb %>%
   geom_point()
 ```
 
+## Hypothesis Testing 
+
+for single coefficients, looks at the table
+
+```{r}
+fit %>% 
+  broom::tidy()
+
+fit_null = lm(price ~ stars + borough, data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough + room_type, data = nyc_airbnb)
+```
+
+
+Looking at multiple use ANOVA comparisons, when adding more than one coefficient, use ANOVA
+Look at both 
+
+```{r}
+fit_null %>% 
+  broom::tidy()
+
+fit_alt %>% 
+  broom::tidy()
+```
+
+ANVOA: Only works for nested models where alternative is only a small deviation from null (that null only differs from alternative by not having one thing which here is room_type)
+
+```{r}
+anova(fit_null, fit_alt) |> 
+  broom::tidy()
+```
+
+
+## Do effects differ across boroughs?
+
+Does the effect of increasing stars in Manhatten change the price in one way, but does it do something else in Brooklyn etc. 
+
+First, use a lot of interactions 
+
+```{r}
+nyc_airbnb %>% 
+  lm(price ~ stars * borough + room_type * borough, data = .) %>% 
+  broom::tidy() 
+```
+
+see that p-values are quite significant so some of these interactions matter 
+
+But other times not looking specifically at statisitcs but just want to fit a general model, one in The Bronx, another in Brooklyn, etc
+
+```{r}
+nyc_airbnb %>% 
+  filter(borough == "Manhattan") %>% 
+  lm(price ~ stars + room_type, data = .) %>% 
+  broom::tidy() 
+
+nyc_airbnb %>% 
+  filter(borough == "Brooklyn") %>% 
+  lm(price ~ stars + room_type, data = .) %>% 
+  broom::tidy() 
+```
+
+linear model of price against stars and roomtype
+i just want to know the effect of room and stars in Manhattan only 
+27.1 effect of increasing starts on price for Manhattan 
+$27 increase price for stars
+
+then for Brookyln it is $21
+and The Bronx for $4.45
+
+Getting fancy and using list cols
+
+```{r}
+nyc_airbnb %>% 
+  nest(data = -borough) #now getting different dataset for each borough, then can do the modelling for each seperately
+```
+
+```{r}
+nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    model = map(data, \(x) lm(price ~ stars + room_type, data = x)),
+    results = map(model, broom::tidy)
+  ) %>% 
+  select(borough, results) %>% 
+  unnest(results)
+```
+
+mapping just means to take this column (model) and apply (broom::tidy) to everything that column 
+
+To make the table easier to read (make it un-tidy) %>% 
+```{r}
+nyc_airbnb %>% 
+  nest(data = -borough) %>% 
+  mutate(
+    model = map(data, \(x) lm(price ~ stars + room_type, data = x)),
+    results = map(model, broom::tidy)
+  ) %>% 
+  select(borough, results) %>% 
+  unnest(results) %>% 
+  select(borough, term, estimate) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  )
+```
+
+See that going from whole apartment to private room in The Bronx saves $52, in Manhattan it will save $124
+Going from private to shared room in Manhattan will save $30 
+
+What about room type across Manhattan neighborhoods?
+
+```{r}
+nyc_airbnb %>% 
+  filter(borough == "Manhattan", 
+         neighborhood == "Chinatown") %>% 
+  lm(price ~ stars + room_type, data = .) %>% 
+  broom::tidy()
+```
+
+Decrease price from private room to shared room in chinatown (save $34)
+
+```{r}
+nyc_airbnb %>% 
+  filter(borough == "Manhattan", 
+         neighborhood == "Chelsea") %>% 
+  lm(price ~ stars + room_type, data = .) %>% 
+  broom::tidy()
+```
+
+Decrease price from private room to shared room in chinatown (save $20)
+
+But this is doing it individually for each neighbourhood in Manhattan, what if i want to do it all together (using list cols again)
+
+And the chunk below shows neighborhood-specific estimates for the coefficients related to room type.
+
+```{r}
+manhattan_airbnb =
+  nyc_airbnb |> 
+  filter(borough == "Manhattan")
+
+manhattan_nest_lm_res =
+  manhattan_airbnb |> 
+  nest(data = -neighborhood) |> 
+  mutate(
+    models = map(data, \(df) lm(price ~ stars + room_type, data = df)),
+    results = map(models, broom::tidy)) |> 
+  select(-data, -models) |> 
+  unnest(results)
+```
+
+
+Look at the effect of roomtype 
+
+```{r}
+manhattan_nest_lm_res %>% 
+  filter(str_detect(term, "room_type")) |> 
+  filter(estimate > 0)
+```
+
+
+```{r}
+manhattan_nest_lm_res |> 
+  filter(str_detect(term, "room_type")) |> 
+  ggplot(aes(x = neighborhood, y = estimate)) + 
+  geom_point() + 
+  facet_wrap(~term) + 
+  theme(axis.text.x = element_text(angle = 80, hjust = 1))
+```
+
+In general shared rooms and private rooms cost less than entire apartments
+shared rooms less than private room 
+(one outlier in Noho of shared rooms, but that is due to the fact there is only one shared room in Noho)
+
 
