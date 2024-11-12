@@ -257,6 +257,8 @@ cv_res_df =
     rmse_smooth = map2_dbl(smooth_mod, test, rmse),
     rmse_wiggly = map2_dbl(wiggly_mod, test, rmse)
   )
+
+#mapping is saying that i am passing linear_mod and test dataframe into the rmse function
 ```
 
 ## Looking now at the RMSE distribution
@@ -275,3 +277,77 @@ cv_res_df %>%
 ```
 
 ![](20241112_cross_validation_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+
+## Example Child Growth
+
+``` r
+child_df = 
+  read_csv("data/nepalese_children.csv") %>% 
+  mutate(
+    weight_ch7 = (weight > 7) * (weight - 7) #for a piece-wise model, when weight < 7 it will be 0, when weight > 7 it will be weight - 7
+  )
+```
+
+    ## Rows: 2705 Columns: 5
+    ## ── Column specification ────────────────────────────────────────────────────────
+    ## Delimiter: ","
+    ## dbl (5): age, sex, weight, height, armc
+    ## 
+    ## ℹ Use `spec()` to retrieve the full column specification for this data.
+    ## ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+``` r
+child_df %>% 
+  ggplot(aes(x = weight, y = armc)) + 
+  geom_point(alpha = .5)
+```
+
+![](20241112_cross_validation_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+
+Looking at different modelling approaches
+
+``` r
+linear_mod_child = lm(armc ~ weight, data = child_df)
+pwl_mod_child = lm(armc ~ weight + weight_ch7, data = child_df)
+smooth_mod_child = gam(armc ~ s(weight), data = child_df)
+```
+
+Looking at these models
+
+1.  linear model
+
+``` r
+child_df %>% 
+  add_predictions(linear_mod_child) %>% 
+  ggplot(aes(x = weight, y = armc)) + 
+  geom_point(alpha = .5) +
+  geom_line(aes(y = pred, color = "red"))
+```
+
+![](20241112_cross_validation_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+
+2.  piece-wise linear model
+
+change point at 7
+
+``` r
+child_df %>% 
+  add_predictions(pwl_mod_child) %>% 
+  ggplot(aes(x = weight, y = armc)) + 
+  geom_point(alpha = .5) +
+  geom_line(aes(y = pred, color = "red"))
+```
+
+![](20241112_cross_validation_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
+3.  Smooth model fit
+
+``` r
+child_df %>% 
+  add_predictions(smooth_mod_child) %>% 
+  ggplot(aes(x = weight, y = armc)) + 
+  geom_point(alpha = .5) +
+  geom_line(aes(y = pred, color = "red"))
+```
+
+![](20241112_cross_validation_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
