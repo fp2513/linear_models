@@ -153,3 +153,83 @@ train_df %>%
 
 smooth model fit is just right, flexible model structure that it captures the trends but it doesn't overfit 
 
+## Compare these models numerically using RMSE
+
+```{r}
+rmse(linear_mod, test_df)
+rmse(smooth_mod, test_df)
+rmse(wiggly_mod, test_df)
+```
+
+But what do these values mean? 
+Whether the difference between the smooth (0.06477024) and wiggly (0.06714495) model is valid or if this is just because of the specific training and testing split that we did 
+
+To answer this we repeat the training and testing split and create models over and over 
+
+## Repeat the train / test split
+
+Instead of writing function repeatedly, there is already a package made (giving list cols, 100 rows where each row has a set of 80/20 split dataframe)
+
+```{r}
+cv_df = 
+  crossv_mc(lidar_df, 100)
+#by default 80/20, 100 splits
+```
+
+But crossv_mc will give us only information on which rows were split into the training and testing section, so we need to have to get back the information 
+
+```{r}
+cv_df = 
+  crossv_mc(lidar_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+  
+```
+
+
+```{r}
+cv_res_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod = map(train, \(x) lm(logratio ~ range, data = x))) %>% 
+  mutate(
+    rmse_linear = map2_dbl(linear_mod, test, rmse)
+  )
+
+print(cv_res_df)
+```
+
+repeat this process with smooth / wiggly fit 
+
+```{r}
+cv_res_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod = map(train, \(x) lm(logratio ~ range, data = x)),
+    smooth_mod = map(train, \(x) gam(logratio ~ range, data = x)),
+    wiggly_mod = map(train, \(x) gam(logratio ~ s(range, k = 30), sp = 10e-6, data = x))) %>% 
+  mutate(
+    rmse_linear = map2_dbl(linear_mod, test, rmse),
+    rmse_smooth = map2_dbl(smooth_mod, test, rmse),
+    rmse_wiggly = map2_dbl(wiggly_mod, test, rmse)
+  )
+```
+
+
+## Looking now at the RMSE distribution 
+
+```{r}
+cv_res_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(), 
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x= model, y = rmse)) + 
+  geom_violin()
+```
+
+

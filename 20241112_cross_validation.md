@@ -164,3 +164,114 @@ train_df %>%
 
 smooth model fit is just right, flexible model structure that it
 captures the trends but it doesn’t overfit
+
+## Compare these models numerically using RMSE
+
+``` r
+rmse(linear_mod, test_df)
+```
+
+    ## [1] 0.127317
+
+``` r
+rmse(smooth_mod, test_df)
+```
+
+    ## [1] 0.08302008
+
+``` r
+rmse(wiggly_mod, test_df)
+```
+
+    ## [1] 0.08848557
+
+But what do these values mean? Whether the difference between the smooth
+(0.06477024) and wiggly (0.06714495) model is valid or if this is just
+because of the specific training and testing split that we did
+
+To answer this we repeat the training and testing split and create
+models over and over
+
+## Repeat the train / test split
+
+Instead of writing function repeatedly, there is already a package made
+(giving list cols, 100 rows where each row has a set of 80/20 split
+dataframe)
+
+``` r
+cv_df = 
+  crossv_mc(lidar_df, 100)
+#by default 80/20, 100 splits
+```
+
+But crossv_mc will give us only information on which rows were split
+into the training and testing section, so we need to have to get back
+the information
+
+``` r
+cv_df = 
+  crossv_mc(lidar_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+```
+
+``` r
+cv_res_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod = map(train, \(x) lm(logratio ~ range, data = x))) %>% 
+  mutate(
+    rmse_linear = map2_dbl(linear_mod, test, rmse)
+  )
+
+print(cv_res_df)
+```
+
+    ## # A tibble: 100 × 5
+    ##    train              test              .id   linear_mod rmse_linear
+    ##    <list>             <list>            <chr> <list>           <dbl>
+    ##  1 <tibble [176 × 3]> <tibble [45 × 3]> 001   <lm>             0.134
+    ##  2 <tibble [176 × 3]> <tibble [45 × 3]> 002   <lm>             0.142
+    ##  3 <tibble [176 × 3]> <tibble [45 × 3]> 003   <lm>             0.128
+    ##  4 <tibble [176 × 3]> <tibble [45 × 3]> 004   <lm>             0.142
+    ##  5 <tibble [176 × 3]> <tibble [45 × 3]> 005   <lm>             0.136
+    ##  6 <tibble [176 × 3]> <tibble [45 × 3]> 006   <lm>             0.143
+    ##  7 <tibble [176 × 3]> <tibble [45 × 3]> 007   <lm>             0.140
+    ##  8 <tibble [176 × 3]> <tibble [45 × 3]> 008   <lm>             0.130
+    ##  9 <tibble [176 × 3]> <tibble [45 × 3]> 009   <lm>             0.135
+    ## 10 <tibble [176 × 3]> <tibble [45 × 3]> 010   <lm>             0.137
+    ## # ℹ 90 more rows
+
+repeat this process with smooth / wiggly fit
+
+``` r
+cv_res_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod = map(train, \(x) lm(logratio ~ range, data = x)),
+    smooth_mod = map(train, \(x) gam(logratio ~ range, data = x)),
+    wiggly_mod = map(train, \(x) gam(logratio ~ s(range, k = 30), sp = 10e-6, data = x))) %>% 
+  mutate(
+    rmse_linear = map2_dbl(linear_mod, test, rmse),
+    rmse_smooth = map2_dbl(smooth_mod, test, rmse),
+    rmse_wiggly = map2_dbl(wiggly_mod, test, rmse)
+  )
+```
+
+## Looking now at the RMSE distribution
+
+``` r
+cv_res_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(), 
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x= model, y = rmse)) + 
+  geom_violin()
+```
+
+![](20241112_cross_validation_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
