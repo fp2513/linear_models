@@ -1,0 +1,14 @@
+---
+title: "20241112_cross_validation"
+output: github_document
+date: "2024-11-12"
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(modelr)
+library(mgcv)
+```
+
+Question: which linear regression will you use? 
+Useful when there is one super clear hypothesis and want to know whether this one variable important in the context of the overall analysis 
