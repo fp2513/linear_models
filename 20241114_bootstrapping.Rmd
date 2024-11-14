@@ -5,25 +5,302 @@ date: "2024-11-14"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(p8105.datasets)
+library(modelr)
+
+set.seed(1)
+
 ```
 
-## R Markdown
+similar to cross validation (model comparison)
+doing the same process over and over (CV which model makes best predictions and do it over and over again)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Bootstrapping is more for statistical inferences 
+People use for everything all the time 
+again repeated sampling involved (but in reality cannot repeated sample over and over to get true population mean but can do it in code)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+In code the idea is to mimic repeated sampling with one sample 
+* draw a bootstrap sample from one sample you have 
 
-```{r cars}
-summary(cars)
+* the bootstrap sample has the same sample size as teh original sample and is drawn with replacement 
+
+* mimics repeated sampling, analyse this sample using intended approach 
+
+* and repeat
+
+
+Bootstrapping. = sampling with replacement until the original n number 
+
+Coding in bootstrapping = draw sample with replacement, analyse, keep track of results with listcols, and repeat 
+
+## Do some bootstrapping 
+
+Let's make up data first and see where bootstrapping comes in handy  
+
+Make a simulated dataframe, where x coming from normal distribution and 250 observations
+
+Let’s create some simulated data. First I’ll generate x, then an error sampled from a normal distribution, and then a response y; this all gets stored in sim_df_const. Then I’ll modify this by multiplying the errors by a term that involves x, and create a new response variable y.
+
+By generating data in this way, I’m creating one case in which the usual linear regression assumptions hold and one case in which they don’t (non-constant variance of error terms across the variables; in linear regression an assumption is that the error terms are independent). The plot below illustrates the differences between the dataset.
+
+
+```{r}
+n_samp = 250 
+
+sim_df_constant = 
+  tibble(
+    x = rnorm(n_samp, 1, 1),
+    error = rnorm(n_samp, 0, 1),
+    y = 2 + 3 * x + error
+  )
+
+sim_df_nonconstant = 
+  sim_df_constant %>% 
+  mutate (
+    error = error * .75 * x,
+    y = 2 + 3 * x + error 
+  )
+
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+Let's look at these 
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+sim_df_constant %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point() +
+  stat_smooth(method = "lm")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+sim_df_nonconstant %>% 
+  ggplot(aes(x = x, y = y)) + 
+  geom_point() +
+  stat_smooth(method = "lm")
+```
+
+These datasets have roughly the same overall variance, but the left panel shows data with constant variance and the right panel shows data with non-constant variance. For this reason, ordinary least squares should provide reasonable estimates in both cases, but inference is standard inference approaches may only be justified for the data on the left.
+
+
+Look at regression results 
+
+```{r}
+sim_df_constant %>% 
+  lm(y ~ x, data = .) %>% 
+  broom::tidy() %>% 
+  knitr::kable(digits = 3)
+```
+
+```{r}
+sim_df_nonconstant %>% 
+  lm(y ~ x, data = .) %>% 
+  broom::tidy() %>% 
+  knitr::kable(digits = 3)
+```
+
+Despite the very different error structures, standard errors for coefficient estimates are similar in both cases!
+
+We’ll use the bootstrap to make inference for the data on the right. **This is intended largely as an illustration for how to use the bootstrap in cases where the theoretical distribution is “unknown”**, although for these data in particular weighted least squares could be more appropriate.
+
+## Bootstrap example
+
+Hand me a dataframe and i will repeated draw samples from that dataframe of the same size with replacement
+
+```{r}
+boot_sample = function(df){
+  
+  boot_df = 
+    sample_frac(df, replace = TRUE) %>% 
+    arrange(x)
+  
+  return(boot_df)
+}
+```
+
+Let's try running this 
+
+```{r}
+sim_df_nonconstant %>% 
+  boot_sample %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_point(alpha = .5) + 
+  stat_smooth(method = "lm")
+```
+
+The darker points indicate the points have be sampled more than once in the bootstrap sample
+
+Each bootstrap sample gives different regression fit 
+The goal then, running over and over bootstrap sample. If i do it repeatedly thousands of times the variability over all the bootstrap samples should be the real variability of the sample 
+  Before we could only judge varibaility based on one sample (but the judgement of the variance was too close to when the variance was constant but it is actually non-constant)
+  
+  
+Can we do this as part of an analysis?
+
+```{r}
+sim_df_nonconstant %>% 
+  boot_sample() %>% 
+  lm(y ~ x, data = .) %>% 
+  broom::tidy() %>% 
+  knitr::kable(digits = 3)
+```
+
+Doing it 1000 times here is the actual distribution of the slope
+
+Create a df with 1000 bootstrap samples, analyse all of them, then pull out the results 
+
+## Bootstrap a lot
+
+```{r}
+boot_straps = 
+  tibble(
+    strap_number = 1:1000
+  ) %>% 
+  mutate(
+    strap_sample = map(strap_number, \(x) boot_sample(df = sim_df_nonconstant))
+  )
+
+boot_straps
+```
+
+Now let's start fitting linear regression models to each bootstrap
+
+```{r}
+boot_straps = 
+  tibble(
+    strap_number = 1:1000
+  ) %>% 
+  mutate(
+    strap_sample = map(strap_number, \(x) boot_sample(df = sim_df_nonconstant)),
+    models = map(strap_sample, \(df) lm(y ~ x, data = df))
+  )
+
+boot_straps
+```
+
+After linear models, want to get results of intercepts / slopes 
+
+```{r}
+boot_straps = 
+  tibble(
+    strap_number = 1:1000
+  ) %>% 
+  mutate(
+    strap_sample = map(strap_number, \(x) boot_sample(df = sim_df_nonconstant)),
+    models = map(strap_sample, \(df) lm(y ~ x, data = df)),
+    results = map(models, broom::tidy)
+  )
+
+boot_straps
+
+bootstraps_results = 
+  boot_straps %>% 
+  select(strap_number, results) %>% 
+  unnest(results)
+
+bootstraps_results
+```
+
+And then all i care about is the bootstrap id number and the results
+
+Want to ask how is variable is the intercept is slope (what is the standard error of this sample actually)
+
+Everytime fitting for boostrap sample seeing how variable it is, then repeating it to estimate the confidence intervals for the sample (esepecially useful when CLT assumptions cannot work)
+
+```{r}
+bootstraps_results = 
+  boot_straps %>% 
+  select(strap_number, results) %>% 
+  unnest(results) %>% 
+  group_by(term) %>% 
+  summarise(
+    boot_se = sd(estimate)
+  ) %>% 
+  knitr::kable(digits = 3)
+
+bootstraps_results
+```
+
+
+Results is better since in the constant, the variability in intercept / slope is one number and we would expect that if the error terms were not independent and regression assumptions are violated we would expect error terms to be even more varied and larger and that is what we see
+
+non-constant intercept / slope se: 0.067 and 0.100
+constnat intercept / slope se = 0.087 and 0.064 (smaller)
+
+
+## do this all using modelr
+instead of mapping if i wanted to 
+
+```{r}
+boot_straps = 
+  sim_df_nonconstant %>% 
+  modelr::bootstrap(1000) %>% 
+  mutate(
+    strap = map(strap, as_tibble),
+    models = map(strap, \(df) lm(y ~ x, data = df)),
+    results = map(models, broom::tidy)
+  ) %>% 
+  select(.id, results) %>% 
+  unnest(results)
+
+boot_straps
+```
+
+
+## What should i report at the tail-end of bootstrapping?
+
+
+```{r}
+boot_straps %>% 
+  group_by(term) %>% 
+  summarise(
+    boot_est = mean(estimate),
+    boot_se = sd(estimate),
+    boot_ci_ll = quantile(estimate, 0.025),
+    boot_ci_ul = quantile(estimate, 0.975)
+  )
+```
+
+
+## AirBNB 
+
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb |> 
+  mutate(stars = review_scores_location / 2) |> 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) |> 
+  filter(borough != "Staten Island") |> 
+  drop_na(price, stars) |> 
+  select(price, stars, borough, neighborhood, room_type)
+
+nyc_airbnb |> 
+  ggplot(aes(x = stars, y = price, color = room_type)) + 
+  geom_point() 
+```
+
+
+Fit a regression of stars against room types in Manhattan 
+
+plotting the data 
+
+Looking at how this graph / distribution came out unlikely that a linear regression is going to work appropriately here. We can bootstrap to examine the distribution of regression coefficients under repeated sampling.
+
+```{r}
+nyc_airbnb |> 
+  filter(borough == "Manhattan") |> 
+  modelr::bootstrap(n = 1000) |> 
+  mutate(
+    models = map(strap, \(df) lm(price ~ stars + room_type, data = df)),
+    results = map(models, broom::tidy)) |> 
+  select(results) |> 
+  unnest(results) |> 
+  filter(term == "stars") |> 
+  ggplot(aes(x = estimate)) + geom_density()
+```
+
+
