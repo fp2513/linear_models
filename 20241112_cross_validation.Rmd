@@ -296,3 +296,33 @@ child_df %>%
 ```
 
 
+Now need to cross validate these models, seeing how well these models can predict with different dataframes 
+
+
+```{r}
+cv_df_child = 
+  crossv_mc(child_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+```
+
+Apply models and extract RMSE
+
+```{r}
+cv_res_df_child = 
+  cv_df_child %>% 
+  mutate (
+    linear_mod_child = map(train, \(x) lm(armc ~ weight, data = x)),
+    pwl_mod_child = map(train, \(x) lm(armc ~ weight + weight_ch7, data = x)),
+    smooth_mod  = map(train, \(df) gam(armc ~ s(weight), data = as_tibble(df)))
+  ) %>% 
+  mutate(
+    rmse_linear = map2_dbl(linear_mod_child, test, rmse),
+    rmse_pwl = map2_dbl(pwl_mod, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_smooth = map2_dbl(smooth_mod, test, \(mod, df) rmse(model = mod, data = df))
+  )
+
+```
+
